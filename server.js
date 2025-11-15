@@ -7,6 +7,7 @@ dotenv.config();
 
 const app = express();
 app.use(cookieParser());
+app.use(express.static("public"));
 
 const {
   SHOPIFY_API_KEY,
@@ -56,21 +57,15 @@ app.get("/auth/callback", async (req, res) => {
   }
 });
 
-// 3️⃣ ROOT PAGE (iframe homepage)
+// Serve your app UI (index.html)
 app.get("/", (req, res) => {
-  res.send(`
-    <html>
-      <body style="font-family: Arial; padding: 40px;">
-        <h1>DropifyHub</h1>
-        <p>Your Shopify app is installed and running!</p>
-        <p>Backend is awake and responding ✓</p>
-      </body>
-    </html>
-  `);
+  res.sendFile("public/index.html", { root: process.cwd() });
 });
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
