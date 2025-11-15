@@ -1,338 +1,496 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>DropifyHub – AI Shopify Builder</title>
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <style>
-      /* ========== GLOBAL ========== */
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        padding: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-          Roboto, sans-serif;
-        background: #000;
-        color: #fff;
-      }
-      a {
-        color: inherit;
-      }
+require('dotenv').config();
+const express = require('express');
+const axios = require('axios');
+const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
+const bodyParser = require('body-parser');
+const { Configuration, OpenAIApi } = require('openai');
 
-      .page {
-        max-width: 1060px;
-        margin: 0 auto;
-        padding: 32px 16px 48px;
-      }
+const app = express();
+app.use(cookieParser());
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-      /* ========== HEADER ========== */
-      .header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        margin-bottom: 32px;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .brand-logo {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 1px solid #444;
-        object-fit: contain;
-        background: #111;
-      }
-      .brand-title {
-        font-size: 20px;
-        font-weight: 600;
-      }
-      .brand-subtitle {
-        font-size: 12px;
-        color: #aaa;
-      }
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
+const {
+  SHOPIFY_API_KEY,
+  SHOPIFY_API_SECRET,
+  SHOPIFY_APP_URL,
+  OPENAI_API_KEY,
+  PORT = 3000,
+} = process.env;
 
-      /* ========== BUTTONS ========== */
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 9px 16px;
-        border-radius: 999px;
-        border: 1px solid #fff;
-        background: #fff;
-        color: #000;
-        font-size: 13px;
-        font-weight: 500;
-        text-decoration: none;
-        cursor: pointer;
-        transition: transform 0.08s ease, background 0.08s ease,
-          color 0.08s ease;
-      }
-      .btn--ghost {
-        background: #000;
-        color: #fff;
-        border-color: #444;
-      }
-      .btn:hover {
-        transform: translateY(-1px);
-      }
-      .btn:active {
-        transform: translateY(0);
-      }
+let openai = null;
+if (OPENAI_API_KEY) {
+  openai = new OpenAIApi(new Configuration({ apiKey: OPENAI_API_KEY }));
+}
 
-      /* ========== LAYOUT SECTIONS ========== */
-      .grid {
-        display: grid;
-        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-        gap: 24px;
-      }
-      @media (max-width: 840px) {
-        .grid {
-          grid-template-columns: minmax(0, 1fr);
+// --- Simple in-memory token store (demo only) ---
+const tokenStore = {}; // { [shopDomain]: accessToken }
+
+// --- Helpers ---
+function buildShopifyInstallURL(shop, state) {
+  const scopes = [
+    'write_themes',
+    'write_products',
+    'read_themes',
+    'read_products',
+  ].join(',');
+  const redirect = `${SHOPIFY_APP_URL}/auth/callback`;
+  return `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${encodeURIComponent(
+    scopes
+  )}&redirect_uri=${encodeURIComponent(redirect)}&state=${state}`;
+}
+
+function verifyHmac(query) {
+  const { hmac, ...params } = query;
+  const message = Object.keys(params)
+    .sort()
+    .map((k) => `${k}=${params[k]}`)
+    .join('&');
+
+  const generated = crypto
+    .createHmac('sha256', SHOPIFY_API_SECRET)
+    .update(message)
+    .digest('hex');
+
+  return generated === hmac;
+}
+
+async function exchangeCodeForToken(shop, code) {
+  const url = `https://${shop}/admin/oauth/access_token`;
+  const resp = await axios.post(url, {
+    client_id: SHOPIFY_API_KEY,
+    client_secret: SHOPIFY_API_SECRET,
+    code,
+  });
+  return resp.data.access_token;
+}
+
+async function shopifyRequest(shop, accessToken, method, path, data) {
+  const url = `https://${shop}/admin/api/2024-10/${path}`;
+  return axios({
+    method,
+    url,
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+    },
+    data,
+  });
+}
+
+// --- AI helpers (optional, but nicer output) ---
+async function generateAIContent({ storeName, niche }) {
+  // Fallback if no OpenAI
+  if (!openai) {
+    return {
+      title: storeName || 'DropifyHub Store',
+      tagline: 'Clean, monochrome style for modern brands',
+      products: [
+        {
+          title: 'Monochrome Essential Tee',
+          desc: 'A premium black & white tee with a relaxed fit.',
+          price: '29.99',
+        },
+        {
+          title: 'Minimal Hoodie',
+          desc: 'A cosy hoodie with subtle branding and a clean silhouette.',
+          price: '59.99',
+        },
+      ],
+      cssNotes:
+        'Black background, white text, minimal typography, lots of spacing.',
+    };
+  }
+
+  const prompt = `
+You are designing a black-and-white Shopify clothing store.
+
+Store name: ${storeName}
+Niche: ${niche}
+
+Return JSON with:
+{
+  "title": "...",
+  "tagline": "...",
+  "cssNotes": "short notes for theme style",
+  "products": [
+    { "title": "...", "desc": "...", "price": "..." },
+    ...
+  ]
+}
+Keep it concise but high quality.
+`;
+
+  const gresp = await openai.createCompletion({
+    model: 'text-davinci-003',
+    prompt,
+    max_tokens: 500,
+    temperature: 0.8,
+  });
+
+  const text = gresp.data.choices[0].text.trim();
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+  } catch (e) {
+    console.warn('Failed to parse AI JSON, using fallback:', e.message);
+  }
+
+  return {
+    title: storeName || 'DropifyHub Store',
+    tagline: niche || 'Monochrome AI-powered storefront',
+    cssNotes: 'Black + white, minimal',
+    products: [],
+  };
+}
+
+// --- OAuth routes ---
+// Start install
+app.get('/auth', (req, res) => {
+  const shop = req.query.shop;
+  if (!shop) {
+    return res
+      .status(400)
+      .send('Missing shop parameter. Use ?shop=your-store.myshopify.com');
+  }
+  const state = crypto.randomBytes(12).toString('hex');
+  res.cookie('state', state, { httpOnly: true });
+  const installURL = buildShopifyInstallURL(shop, state);
+  res.redirect(installURL);
+});
+
+// OAuth callback
+app.get('/auth/callback', async (req, res) => {
+  try {
+    const { shop, hmac, code, state } = req.query;
+    const storedState = req.cookies.state;
+    if (state !== storedState) return res.status(400).send('Invalid state');
+    if (!verifyHmac(req.query)) return res.status(400).send('HMAC check failed');
+
+    const accessToken = await exchangeCodeForToken(shop, code);
+    tokenStore[shop] = accessToken; // demo storage
+
+    // Redirect into app UI with shop param
+    res.redirect(`/app?shop=${encodeURIComponent(shop)}`);
+  } catch (err) {
+    console.error('Auth callback error:', err.response?.data || err.message);
+    res.status(500).send('Auth callback failed');
+  }
+});
+
+// --- Simple B&W app UI ---
+// This is what the merchant sees when they open the app
+app.get('/app', (req, res) => {
+  const shop = req.query.shop;
+  if (!shop) {
+    return res
+      .status(400)
+      .send('Missing shop parameter. This page expects ?shop=your-store.myshopify.com');
+  }
+
+  const hasToken = !!tokenStore[shop];
+
+  const baseCSS = `
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#000;color:#fff;margin:0;padding:0}
+.page{max-width:960px;margin:0 auto;padding:24px 16px 40px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-logo{width:40px;height:40px;border-radius:50%;background:#111;border:1px solid #333}
+.brand-title{font-size:18px;font-weight:600}
+.brand-sub{font-size:12px;color:#aaa}
+.card{background:#111;border-radius:14px;border:1px solid #222;padding:18px 16px;margin-bottom:16px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:4px}
+.card-sub{font-size:12px;color:#aaa;margin-bottom:10px}
+.field{margin-bottom:10px}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:#aaa;margin-bottom:4px;display:block}
+.input{width:100%;border-radius:999px;border:1px solid #333;background:#000;color:#fff;font-size:13px;padding:8px 10px;outline:none}
+.input:focus{border-color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid #fff;background:#fff;color:#000;font-size:13px;font-weight:500;padding:8px 14px;text-decoration:none;cursor:pointer;transition:transform .08s ease}
+.btn--ghost{background:#000;color:#fff;border-color:#444}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.hint{font-size:11px;color:#777;margin-top:3px}
+.output{font-family:ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:12px;background:#050505;border-radius:10px;border:1px solid #222;padding:8px;white-space:pre-wrap;max-height:280px;overflow:auto;margin-top:8px}
+.footer{margin-top:24px;font-size:11px;color:#666;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+`;
+
+  res.send(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>DropifyHub – Theme & Product Pusher</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>${baseCSS}</style>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-logo"></div>
+        <div>
+          <div class="brand-title">DropifyHub Pusher</div>
+          <div class="brand-sub">${shop}</div>
+        </div>
+      </div>
+      <div>
+        <button class="btn btn--ghost" onclick="window.location.href='https://${shop}/admin'">
+          Open Shopify Admin
+        </button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="card-title">Connection status</div>
+      <div class="card-sub">
+        ${
+          hasToken
+            ? 'App is connected to this Shopify store. You can push themes and products.'
+            : 'No access token found. Please reinstall the app or complete OAuth.'
         }
-      }
+      </div>
+      <div class="hint">
+        This app only pushes themes and products using AI-generated or fallback content.
+      </div>
+    </section>
 
-      .card {
-        background: #111;
-        border-radius: 16px;
-        padding: 20px 18px;
-        border: 1px solid #222;
-        margin-bottom: 20px;
+    <section class="card">
+      <div class="card-title">Theme settings</div>
+      <div class="card-sub">Black & white, minimal layout with AI copy.</div>
+      <div class="field">
+        <label class="label" for="storeName">Store name</label>
+        <input id="storeName" class="input" placeholder="DropifyHub Clothing" value="DropifyHub Clothing" />
+      </div>
+      <div class="field">
+        <label class="label" for="niche">Niche / style</label>
+        <input id="niche" class="input" placeholder="Minimal monochrome streetwear" value="Minimal monochrome streetwear" />
+      </div>
+      <button class="btn" type="button" onclick="generateTheme()" ${hasToken ? '' : 'disabled'}>
+        Generate AI theme
+      </button>
+      ${
+        !hasToken
+          ? '<div class="hint">Connect the app to this store via Shopify to enable this.</div>'
+          : ''
       }
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 12px;
-      }
-      .card-title {
-        font-size: 15px;
-        font-weight: 600;
-      }
-      .card-subtitle {
-        font-size: 12px;
-        color: #aaa;
-      }
+      <div id="themeOutput" class="output">No theme generation yet.</div>
+    </section>
 
-      /* ========== FORM ELEMENTS ========== */
-      .field {
-        margin-bottom: 12px;
+    <section class="card">
+      <div class="card-title">Sample products</div>
+      <div class="card-sub">Create AI-based sample products for this niche.</div>
+      <button class="btn btn--ghost" type="button" onclick="generateProducts()" ${hasToken ? '' : 'disabled'}>
+        Generate AI products
+      </button>
+      ${
+        !hasToken
+          ? '<div class="hint">Connect the app first to enable product push.</div>'
+          : ''
       }
-      .label {
-        display: block;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: #aaa;
-        margin-bottom: 4px;
-      }
-      .input,
-      .textarea {
-        width: 100%;
-        border-radius: 999px;
-        border: 1px solid #333;
-        padding: 9px 11px;
-        background: #000;
-        color: #fff;
-        font-size: 13px;
-        outline: none;
-      }
-      .textarea {
-        border-radius: 10px;
-        min-height: 72px;
-        resize: vertical;
-      }
-      .input:focus,
-      .textarea:focus {
-        border-color: #fff;
-      }
+      <div id="productOutput" class="output">No products pushed yet.</div>
+    </section>
 
-      .hint {
-        font-size: 11px;
-        color: #777;
-        margin-top: 4px;
-      }
+    <footer class="footer">
+      <span>© ${new Date().getFullYear()} DropifyHub</span>
+      <span>Black & white AI store builder</span>
+    </footer>
+  </div>
 
-      /* ========== TAG / BADGE ========== */
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 9px;
-        border-radius: 999px;
-        border: 1px solid #333;
-        font-size: 11px;
-        color: #aaa;
-      }
-      .pill-dot {
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: #0f0;
-      }
+  <script>
+    const shop = ${JSON.stringify(shop)};
 
-      /* ========== OUTPUT AREA ========== */
-      .output {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        font-size: 12px;
-        background: #050505;
-        border-radius: 10px;
-        border: 1px solid #222;
-        padding: 10px;
-        white-space: pre-wrap;
-        max-height: 320px;
-        overflow: auto;
-      }
-      .output--empty {
-        color: #555;
-      }
+    async function generateTheme() {
+      const storeName = document.getElementById('storeName').value.trim() || 'DropifyHub Store';
+      const niche = document.getElementById('niche').value.trim() || 'clothing';
+      const out = document.getElementById('themeOutput');
+      out.textContent = 'Generating theme...';
 
-      /* ========== FOOTER ========== */
-      .footer {
-        margin-top: 28px;
-        font-size: 11px;
-        color: #666;
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
+      try {
+        const res = await fetch('/api/generate-theme', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shop, storeName, niche })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          out.textContent = 'Error: ' + (data && data.error ? data.error : res.statusText);
+          return;
+        }
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + (e.message || 'Unknown error');
       }
-    </style>
+    }
+
+    async function generateProducts() {
+      const storeName = document.getElementById('storeName').value.trim() || 'DropifyHub Store';
+      const niche = document.getElementById('niche').value.trim() || 'clothing';
+      const out = document.getElementById('productOutput');
+      out.textContent = 'Generating products...';
+
+      try {
+        const res = await fetch('/api/generate-products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shop, storeName, niche })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          out.textContent = 'Error: ' + (data && data.error ? data.error : res.statusText);
+          return;
+        }
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.textContent = 'Error: ' + (e.message || 'Unknown error');
+      }
+    }
+  </script>
+</body>
+</html>`);
+});
+
+// --- API: generate theme ---
+app.post('/api/generate-theme', async (req, res) => {
+  try {
+    const { shop, storeName = 'DropifyHub Store', niche = 'clothing' } = req.body;
+    if (!shop) return res.status(400).json({ error: 'Missing shop' });
+
+    const accessToken = tokenStore[shop];
+    if (!accessToken) return res.status(400).json({ error: 'No access token for this shop' });
+
+    const ai = await generateAIContent({ storeName, niche });
+
+    // Create theme
+    const themeResp = await shopifyRequest(shop, accessToken, 'post', 'themes.json', {
+      theme: {
+        name: `${storeName} - AI Monochrome`,
+        role: 'unpublished',
+      },
+    });
+    const theme = themeResp.data.theme;
+
+    // CSS asset (black & white)
+    const cssValue = `
+/* DropifyHub AI Monochrome Theme */
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:#000;
+  color:#fff;
+}
+.header{padding:40px 20px;text-align:center;}
+.hero{padding:60px 20px;max-width:900px;margin:0 auto;}
+a{color:#fff;text-decoration:none;}
+button{background:#fff;color:#000;border-radius:999px;border:1px solid #fff;padding:8px 16px;}
+/* Notes: ${ai.cssNotes || ''} */
+`;
+    await shopifyRequest(
+      shop,
+      accessToken,
+      'put',
+      `themes/${theme.id}/assets.json`,
+      { asset: { key: 'assets/ai-style.css', value: cssValue } }
+    );
+
+    // index.liquid
+    const indexLiquid = `{% layout none %}
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${ai.title || storeName}</title>
+    {{ 'ai-style.css' | asset_url | stylesheet_tag }}
   </head>
   <body>
-    <div class="page">
-      <!-- HEADER -->
-      <header class="header">
-        <div class="brand">
-          <!-- Replace src with your own logo path -->
-          <img
-            src="/uploads/default-logo.png"
-            alt="DropifyHub"
-            class="brand-logo"
-            onerror="this.style.display='none'"
-          />
-          <div>
-            <div class="brand-title">DropifyHub</div>
-            <div class="brand-subtitle">
-              AI-powered Shopify websites for clothing brands
-            </div>
-          </div>
-        </div>
-        <div class="header-actions">
-          <button class="btn btn--ghost" type="button" onclick="scrollToSection('generator')">
-            Open generator
-          </button>
-          <a
-            class="btn"
-            href="https://partners.shopify.com"
-            target="_blank"
-            rel="noopener"
-          >
-            Shopify Partner Dashboard
-          </a>
-        </div>
-      </header>
+    <div class="header">
+      <h1>${ai.title || storeName}</h1>
+      <p>${ai.tagline || ''}</p>
+    </div>
+    <main class="hero">
+      <section>
+        <h2>Featured products</h2>
+        <p>Products generated by DropifyHub AI.</p>
+      </section>
+    </main>
+  </body>
+</html>`;
 
-      <!-- MAIN GRID -->
-      <div class="grid">
-        <!-- LEFT: WORKFLOW -->
-        <section>
-          <!-- Step 1: connect Shopify -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Step 1 · Connect Shopify store</div>
-                <div class="card-subtitle">
-                  Install the DropifyHub app on your client’s store.
-                </div>
-              </div>
-              <div class="pill">
-                <span class="pill-dot"></span> Live
-              </div>
-            </div>
-            <div class="field">
-              <label class="label" for="shopDomain">Shopify store URL</label>
-              <input
-                id="shopDomain"
-                class="input"
-                placeholder="example-store.myshopify.com"
-              />
-              <div class="hint">
-                Use the full <code>myshopify.com</code> domain for the client’s
-                store.
-              </div>
-            </div>
-            <button class="btn" type="button" onclick="handleInstall()">
-              Install app on this store
-            </button>
-            <div class="hint" style="margin-top:8px;">
-              This will redirect to
-              <code>/auth?shop=example-store.myshopify.com</code> on your
-              backend.
-            </div>
-          </div>
+    await shopifyRequest(
+      shop,
+      accessToken,
+      'put',
+      `themes/${theme.id}/assets.json`,
+      { asset: { key: 'templates/index.liquid', value: indexLiquid } }
+    );
 
-          <!-- Step 2: generate website -->
-          <div class="card" id="generator">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Step 2 · Generate the website</div>
-                <div class="card-subtitle">
-                  Let the AI create the theme, pages, and sample products.
-                </div>
-              </div>
-            </div>
+    res.json({
+      success: true,
+      themeId: theme.id,
+      themeName: theme.name,
+      aiSummary: {
+        title: ai.title,
+        tagline: ai.tagline,
+        cssNotes: ai.cssNotes,
+      },
+    });
+  } catch (err) {
+    console.error('Theme generation error:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
 
-            <form onsubmit="handleGenerate(event)">
-              <div class="field">
-                <label class="label" for="genShop">Shop domain</label>
-                <input
-                  id="genShop"
-                  name="shop"
-                  class="input"
-                  placeholder="example-store.myshopify.com"
-                  required
-                />
-              </div>
+// --- API: generate products ---
+app.post('/api/generate-products', async (req, res) => {
+  try {
+    const { shop, storeName = 'DropifyHub Store', niche = 'clothing' } = req.body;
+    if (!shop) return res.status(400).json({ error: 'Missing shop' });
 
-              <div class="field">
-                <label class="label" for="genToken">Shopify access token</label>
-                <input
-                  id="genToken"
-                  name="accessToken"
-                  class="input"
-                  placeholder="Paste the store access token here"
-                  required
-                />
-                <div class="hint">
-                  This is returned by your backend after the Shopify install
-                  callback.
-                </div>
-              </div>
+    const accessToken = tokenStore[shop];
+    if (!accessToken) return res.status(400).json({ error: 'No access token for this shop' });
 
-              <div class="field">
-                <label class="label" for="genName">Store name</label>
-                <input
-                  id="genName"
-                  name="storeName"
-                  class="input"
-                  placeholder="DropifyHub Clothing"
-                  value="DropifyHub Clothing"
-                />
-              </div>
+    const ai = await generateAIContent({ storeName, niche });
+    const products = [];
 
-              <div class="field">
-                <label clas
+    if (Array.isArray(ai.products) && ai.products.length) {
+      for (const p of ai.products.slice(0, 5)) {
+        try {
+          const resp = await shopifyRequest(
+            shop,
+            accessToken,
+            'post',
+            'products.json',
+            {
+              product: {
+                title: p.title || 'AI Product',
+                body_html: p.desc || '',
+                variants: [{ price: p.price || '29.99' }],
+              },
+            }
+          );
+          products.push(resp.data.product);
+        } catch (e) {
+          console.warn('Failed to create product:', e.response?.data || e.message);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      createdCount: products.length,
+      products,
+    });
+  } catch (err) {
+    console.error('Product generation error:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data || err.message });
+  }
+});
+
+// Root – simple info
+app.get('/', (req, res) => {
+  res.send(
+    '<h2>DropifyHub Theme & Product Pusher</h2><p>Install this app in a Shopify store, then it will redirect to /app?shop=...</p>'
+  );
+});
+
+app.listen(PORT, () => {
+  console.log(`DropifyHub pusher running on port ${PORT}`);
+});
