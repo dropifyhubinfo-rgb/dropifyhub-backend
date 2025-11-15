@@ -37,7 +37,6 @@ app.get("/auth/callback", async (req, res) => {
   }
 
   try {
-    // Exchange code for access token
     const tokenResponse = await axios.post(
       `https://${shop}/admin/oauth/access_token`,
       {
@@ -56,13 +55,22 @@ app.get("/auth/callback", async (req, res) => {
   }
 });
 
-// 3️⃣ ROOT PAGE
+// 3️⃣ ROOT PAGE (iframe homepage)
 app.get("/", (req, res) => {
-  res.send("Backend is online!");
+  res.send(`
+    <html>
+      <body style="font-family: Arial; padding: 40px;">
+        <h1>DropifyHub</h1>
+        <p>Your Shopify app is installed and running!</p>
+        <p>Backend is awake and responding ✓</p>
+      </body>
+    </html>
+  `);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
