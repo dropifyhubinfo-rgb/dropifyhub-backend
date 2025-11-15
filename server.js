@@ -48,7 +48,8 @@ app.get("/auth/callback", async (req, res) => {
 
     const accessToken = tokenResponse.data.access_token;
 
-    res.send(`App Installed! ACCESS TOKEN: ${accessToken}`);
+   res.redirect(`https://${shop}/admin/apps/${SHOPIFY_API_KEY}`);
+
   } catch (error) {
     console.error("Token exchange error:", error.response?.data || error);
     res.status(500).send("OAuth error.");
@@ -70,6 +71,7 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
