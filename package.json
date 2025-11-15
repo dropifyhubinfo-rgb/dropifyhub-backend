@@ -1,0 +1,15 @@
+{
+  "name": "dropifyhub-backend",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "express": "^4.18.2",
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.3.1"
+  }
+}
