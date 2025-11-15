@@ -1,389 +1,338 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <title>DropifyHub</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8" />
+    <title>DropifyHub – AI Shopify Builder</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
+      /* ========== GLOBAL ========== */
       * {
         box-sizing: border-box;
+      }
+      body {
         margin: 0;
         padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background: #000;
+        color: #fff;
+      }
+      a {
+        color: inherit;
       }
 
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "San Francisco",
-          "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background: #f6f6f7;
-        color: #111827;
+      .page {
+        max-width: 1060px;
+        margin: 0 auto;
+        padding: 32px 16px 48px;
       }
 
-      .app {
-        display: grid;
-        grid-template-columns: 240px 1fr;
-        min-height: 100vh;
-      }
-
-      /* Sidebar */
-      .sidebar {
-        background: #0b1120;
-        color: #e5e7eb;
-        padding: 24px 20px;
-      }
-
-      .logo {
-        font-weight: 700;
-        font-size: 20px;
+      /* ========== HEADER ========== */
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
         margin-bottom: 32px;
       }
-
-      .nav-section-title {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #6b7280;
-        margin-bottom: 8px;
-      }
-
-      .nav {
-        list-style: none;
-        margin-bottom: 24px;
-      }
-
-      .nav li {
-        margin-bottom: 4px;
-      }
-
-      .nav button {
-        width: 100%;
-        text-align: left;
-        border: none;
-        background: transparent;
-        color: #9ca3af;
-        padding: 8px 10px;
-        border-radius: 6px;
-        font-size: 14px;
-        cursor: pointer;
-      }
-
-      .nav button.active {
-        background: #111827;
-        color: #f9fafb;
-      }
-
-      .nav button:hover {
-        background: #1f2937;
-        color: #f9fafb;
-      }
-
-      /* Main content */
-      .main {
-        padding: 24px 32px 40px;
-      }
-
-      .topbar {
+      .brand {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        margin-bottom: 24px;
+        gap: 12px;
       }
-
-      .topbar-title {
-        font-size: 22px;
+      .brand-logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1px solid #444;
+        object-fit: contain;
+        background: #111;
+      }
+      .brand-title {
+        font-size: 20px;
         font-weight: 600;
       }
-
-      .topbar-sub {
-        font-size: 13px;
-        color: #6b7280;
-        margin-top: 4px;
-      }
-
-      .pill {
-        background: #ecfdf5;
-        color: #16a34a;
-        border-radius: 999px;
-        padding: 4px 10px;
+      .brand-subtitle {
         font-size: 12px;
-        font-weight: 500;
+        color: #aaa;
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
+      /* ========== BUTTONS ========== */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 9px 16px;
+        border-radius: 999px;
+        border: 1px solid #fff;
+        background: #fff;
+        color: #000;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        cursor: pointer;
+        transition: transform 0.08s ease, background 0.08s ease,
+          color 0.08s ease;
+      }
+      .btn--ghost {
+        background: #000;
+        color: #fff;
+        border-color: #444;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+      .btn:active {
+        transform: translateY(0);
+      }
+
+      /* ========== LAYOUT SECTIONS ========== */
       .grid {
         display: grid;
-        grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
-        gap: 20px;
-        align-items: flex-start;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        gap: 24px;
+      }
+      @media (max-width: 840px) {
+        .grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       .card {
-        background: white;
-        border-radius: 10px;
-        border: 1px solid #e5e7eb;
-        padding: 18px 18px 16px;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        background: #111;
+        border-radius: 16px;
+        padding: 20px 18px;
+        border: 1px solid #222;
+        margin-bottom: 20px;
       }
-
-      .card h3 {
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .card-title {
         font-size: 15px;
         font-weight: 600;
-        margin-bottom: 6px;
       }
-
-      .card p {
-        font-size: 13px;
-        color: #6b7280;
-      }
-
-      .card + .card {
-        margin-top: 14px;
-      }
-
-      .field-label {
+      .card-subtitle {
         font-size: 12px;
-        color: #4b5563;
-        margin-top: 10px;
+        color: #aaa;
+      }
+
+      /* ========== FORM ELEMENTS ========== */
+      .field {
+        margin-bottom: 12px;
+      }
+      .label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #aaa;
         margin-bottom: 4px;
       }
-
-      input[type="text"],
-      textarea,
-      select {
+      .input,
+      .textarea {
         width: 100%;
-        border-radius: 7px;
-        border: 1px solid #d1d5db;
-        padding: 8px 10px;
-        font-size: 13px;
-        font-family: inherit;
-      }
-
-      textarea {
-        resize: vertical;
-        min-height: 80px;
-      }
-
-      .btn-row {
-        margin-top: 10px;
-        display: flex;
-        gap: 8px;
-      }
-
-      .btn {
-        border-radius: 7px;
-        border: none;
-        padding: 8px 12px;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-      }
-
-      .btn-primary {
-        background: #111827;
-        color: #f9fafb;
-      }
-
-      .btn-secondary {
-        background: #e5e7eb;
-        color: #111827;
-      }
-
-      .btn-primary:hover {
-        background: #020617;
-      }
-
-      .tag-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
-      }
-
-      .tag {
-        font-size: 11px;
-        background: #f3f4f6;
-        color: #4b5563;
         border-radius: 999px;
-        padding: 4px 10px;
+        border: 1px solid #333;
+        padding: 9px 11px;
+        background: #000;
+        color: #fff;
+        font-size: 13px;
+        outline: none;
+      }
+      .textarea {
+        border-radius: 10px;
+        min-height: 72px;
+        resize: vertical;
+      }
+      .input:focus,
+      .textarea:focus {
+        border-color: #fff;
       }
 
-      .small-label {
+      .hint {
         font-size: 11px;
-        color: #9ca3af;
-        margin-top: 8px;
+        color: #777;
+        margin-top: 4px;
       }
 
-      @media (max-width: 880px) {
-        .app {
-          grid-template-columns: 1fr;
-        }
-        .sidebar {
-          display: none; /* simple: hide sidebar on tiny screens */
-        }
+      /* ========== TAG / BADGE ========== */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid #333;
+        font-size: 11px;
+        color: #aaa;
+      }
+      .pill-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: #0f0;
+      }
+
+      /* ========== OUTPUT AREA ========== */
+      .output {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        background: #050505;
+        border-radius: 10px;
+        border: 1px solid #222;
+        padding: 10px;
+        white-space: pre-wrap;
+        max-height: 320px;
+        overflow: auto;
+      }
+      .output--empty {
+        color: #555;
+      }
+
+      /* ========== FOOTER ========== */
+      .footer {
+        margin-top: 28px;
+        font-size: 11px;
+        color: #666;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
       }
     </style>
   </head>
   <body>
-    <div class="app">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="logo">DropifyHub</div>
-
-        <div>
-          <div class="nav-section-title">Workspace</div>
-          <ul class="nav">
-            <li>
-              <button class="active">AI Product Builder</button>
-            </li>
-            <li>
-              <button disabled>Bulk actions (coming soon)</button>
-            </li>
-            <li>
-              <button disabled>History (coming soon)</button>
-            </li>
-          </ul>
-        </div>
-
-        <div>
-          <div class="nav-section-title">Account</div>
-          <ul class="nav">
-            <li>
-              <button disabled>Usage & plan</button>
-            </li>
-            <li>
-              <button disabled>Settings</button>
-            </li>
-          </ul>
-        </div>
-      </aside>
-
-      <!-- Main -->
-      <main class="main">
-        <header class="topbar">
+    <div class="page">
+      <!-- HEADER -->
+      <header class="header">
+        <div class="brand">
+          <!-- Replace src with your own logo path -->
+          <img
+            src="/uploads/default-logo.png"
+            alt="DropifyHub"
+            class="brand-logo"
+            onerror="this.style.display='none'"
+          />
           <div>
-            <div class="topbar-title">AI Product Builder</div>
-            <div class="topbar-sub">
-              Generate product titles & descriptions with AI, then push them
-              into your Shopify products.
+            <div class="brand-title">DropifyHub</div>
+            <div class="brand-subtitle">
+              AI-powered Shopify websites for clothing brands
             </div>
           </div>
-          <div class="pill">Connected ✓</div>
-        </header>
+        </div>
+        <div class="header-actions">
+          <button class="btn btn--ghost" type="button" onclick="scrollToSection('generator')">
+            Open generator
+          </button>
+          <a
+            class="btn"
+            href="https://partners.shopify.com"
+            target="_blank"
+            rel="noopener"
+          >
+            Shopify Partner Dashboard
+          </a>
+        </div>
+      </header>
 
-        <section class="grid">
-          <!-- Left: inputs -->
-          <div>
-            <div class="card">
-              <h3>1. Describe the product</h3>
-              <p>
-                Tell the AI what you’re selling. We’ll generate on-brand titles
-                and descriptions for you.
-              </p>
-
-              <label class="field-label">Product niche</label>
+      <!-- MAIN GRID -->
+      <div class="grid">
+        <!-- LEFT: WORKFLOW -->
+        <section>
+          <!-- Step 1: connect Shopify -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Step 1 · Connect Shopify store</div>
+                <div class="card-subtitle">
+                  Install the DropifyHub app on your client’s store.
+                </div>
+              </div>
+              <div class="pill">
+                <span class="pill-dot"></span> Live
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="shopDomain">Shopify store URL</label>
               <input
-                id="nicheInput"
-                type="text"
-                placeholder="e.g. Minimal streetwear hoodie"
+                id="shopDomain"
+                class="input"
+                placeholder="example-store.myshopify.com"
               />
+              <div class="hint">
+                Use the full <code>myshopify.com</code> domain for the client’s
+                store.
+              </div>
+            </div>
+            <button class="btn" type="button" onclick="handleInstall()">
+              Install app on this store
+            </button>
+            <div class="hint" style="margin-top:8px;">
+              This will redirect to
+              <code>/auth?shop=example-store.myshopify.com</code> on your
+              backend.
+            </div>
+          </div>
 
-              <label class="field-label">Target audience</label>
-              <input
-                id="audienceInput"
-                type="text"
-                placeholder="e.g. Gen Z, 18–24, UK / US"
-              />
+          <!-- Step 2: generate website -->
+          <div class="card" id="generator">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Step 2 · Generate the website</div>
+                <div class="card-subtitle">
+                  Let the AI create the theme, pages, and sample products.
+                </div>
+              </div>
+            </div>
 
-              <label class="field-label">Tone of voice</label>
-              <select id="toneInput">
-                <option value="conversion focused">Conversion focused</option>
-                <option value="casual">Casual</option>
-                <option value="playful">Playful</option>
-                <option value="luxury">Luxury</option>
-              </select>
-
-              <div class="btn-row">
-                <button class="btn btn-primary" onclick="generateCopy()">
-                  Generate with AI
-                </button>
-                <button class="btn btn-secondary" onclick="clearOutputs()">
-                  Clear
-                </button>
+            <form onsubmit="handleGenerate(event)">
+              <div class="field">
+                <label class="label" for="genShop">Shop domain</label>
+                <input
+                  id="genShop"
+                  name="shop"
+                  class="input"
+                  placeholder="example-store.myshopify.com"
+                  required
+                />
               </div>
 
-              <p class="small-label">
-                * later we’ll hook this button to your backend AI endpoint.
-              </p>
-            </div>
-          </div>
-
-          <!-- Right: AI output -->
-          <div>
-            <div class="card">
-              <h3>AI output</h3>
-              <p>Review & edit before saving to your product.</p>
-
-              <label class="field-label">Suggested title</label>
-              <input id="titleOutput" type="text" />
-
-              <label class="field-label">Suggested description</label>
-              <textarea id="descriptionOutput"></textarea>
-
-              <div class="btn-row">
-                <button class="btn btn-primary" disabled>
-                  Save to Shopify (coming soon)
-                </button>
+              <div class="field">
+                <label class="label" for="genToken">Shopify access token</label>
+                <input
+                  id="genToken"
+                  name="accessToken"
+                  class="input"
+                  placeholder="Paste the store access token here"
+                  required
+                />
+                <div class="hint">
+                  This is returned by your backend after the Shopify install
+                  callback.
+                </div>
               </div>
 
-              <div class="tag-row" id="tagRow"></div>
-            </div>
-          </div>
-        </section>
-      </main>
-    </div>
+              <div class="field">
+                <label class="label" for="genName">Store name</label>
+                <input
+                  id="genName"
+                  name="storeName"
+                  class="input"
+                  placeholder="DropifyHub Clothing"
+                  value="DropifyHub Clothing"
+                />
+              </div>
 
-    <script>
-      // SUPER SIMPLE FRONT-END MOCK AI – replace with real backend later
-      function generateCopy() {
-        const niche = document.getElementById("nicheInput").value || "Product";
-        const audience =
-          document.getElementById("audienceInput").value || "your customers";
-        const tone = document.getElementById("toneInput").value;
-
-        const title =
-          niche +
-          " – " +
-          (tone === "luxury"
-            ? "Premium Edition"
-            : tone === "playful"
-            ? "Must-Have Drop"
-            : "Best Seller");
-
-        const description =
-          "Designed for " +
-          audience +
-          ", this " +
-          niche.toLowerCase() +
-          " blends comfort and style so your customers feel confident every day. " +
-          "Optimised for high conversions with clear benefits, social-media-ready messaging and a clean structure that’s easy to scan.";
-
-        document.getElementById("titleOutput").value = title;
-        document.getElementById("descriptionOutput").value = description;
-
-        const tags = [tone, "AI generated", "high converting"];
-        const tagRow = document.getElementById("tagRow");
-        tagRow.innerHTML = "";
-        tags.forEach((t) => {
-          const span = document.createElement("span");
-          span.className = "tag";
-          span.innerText = t;
-          tagRow.appendChild(span);
-        });
-      }
-
-      function clearOutputs() {
-        document.getElementById("titleOutput").value = "";
-        document.getElementById("descriptionOutput").value = "";
-        document.getElementById("tagRow").innerHTML = "";
-      }
-    </script>
-  </body>
-</html>
+              <div class="field">
+                <label clas
